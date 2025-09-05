@@ -1,0 +1,3 @@
+../Core/Src/I2C_Codec.c:11:19:Codec_Init	24	static
+../Core/Src/I2C_Codec.c:59:19:Codec_WriteRegister	32	static
+../Core/Src/I2C_Codec.c:65:19:Codec_ReadRegister	40	static

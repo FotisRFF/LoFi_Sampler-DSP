@@ -1,0 +1,4 @@
+../Core/Src/I2C_Codec.c:68:19:Codec_ReadRegister	1
+../Core/Src/I2C_Codec.c:74:19:Codec_WriteRegister	1
+../Core/Src/I2C_Codec.c:78:6:Codec_Reset	1
+../Core/Src/I2C_Codec.c:10:19:Codec_Init	1

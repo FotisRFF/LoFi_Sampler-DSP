@@ -1,6 +1,0 @@
-../Core/Src/SSD1306.c:13:26:SSD1306_WriteCommand.isra	24	static
-../Core/Src/SSD1306.c:75:6:SSD1306_Clear	0	static
-../Core/Src/SSD1306.c:79:6:SSD1306_UpdateScreen	48	static
-../Core/Src/SSD1306.c:30:19:SSD1306_Init	16	static
-../Core/Src/SSD1306.c:88:6:SSD1306_DrawPixel	8	static
-../Core/Src/SSD1306.c:98:6:SSD1306_DrawBar	24	static

@@ -23,14 +23,14 @@ HAL_StatusTypeDef Codec_Init(TLV_CODEC *codec, I2C_HandleTypeDef *i2cHandle )
     HAL_StatusTypeDef status;
 
     // Software Reset
-    status = Codec_WriteRegister(codec, 0x01, 0x01); // komple grafw otan i timi einai checkarismeni
+    status = Codec_WriteRegister(codec, 0x01, 0x01);
     HAL_Delay(10);
 
     // Clock settings
-    status = Codec_WriteRegister(codec, 0x03, 0x10); // dn jerw akoma
+    status = Codec_WriteRegister(codec, 0x03, 0x10);
 
     // Audio routing
-    status = Codec_WriteRegister(codec, 0x07, 0x08); //
+    status = Codec_WriteRegister(codec, 0x07, 0x08);
 
     status = Codec_WriteRegister(codec, 0x0F, 0x00);
 

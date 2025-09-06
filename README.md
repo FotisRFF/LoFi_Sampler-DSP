@@ -9,7 +9,8 @@ way to play record and enjoy their music
 
 ## 🖼️ Hardware Preview
 
-![Uploading IMG_20250906_125656620 (1).jpg…]()
+
+![IMG_20250906_125656620 (1)](https://github.com/user-attachments/assets/e3231ba0-5bec-4933-8256-623def35e6a2)
 
 
 ---

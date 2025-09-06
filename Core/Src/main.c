@@ -35,7 +35,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define BUFFER_SIZE 128
+#define BUFFER_SIZE 512
 #define INT16_TO_FLOAT (1.0f / 32768.0f)
 #define FLOAT_TO_INT16 (32767.0f)
 #define USB_BUFLEN 128
@@ -165,9 +165,10 @@ void ProcessData(){
     	leftOut=leftIn;
 
 
-    	outBufPtr[n] = (uint16_t) (FLOAT_TO_INT16* leftOut);
+    	outBufPtr[n] = (int16_t) (FLOAT_TO_INT16 * leftOut);
 
-    	rightIn = INT16_TO_FLOAT *inBufPtr[n+1];
+
+    	rightIn = INT16_TO_FLOAT * inBufPtr[n+1];
     	if(rightIn > 1.0f){
     	     rightIn -= 2.0f;
     	}
@@ -175,14 +176,11 @@ void ProcessData(){
     	rightOut=rightIn;
 
 
-    	outBufPtr[n+1] = (uint16_t) (FLOAT_TO_INT16 *rightOut);
-
-
+    	outBufPtr[n+1] = (int16_t) (FLOAT_TO_INT16 * rightOut);
     }
     dataReadyFlag = 0;
 
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_8);
-    HAL_Delay(250);
+
 }
 
 
@@ -239,7 +237,7 @@ int main(void)
   //ssd1306_UpdateScreen();
 
 
- HAL_StatusTypeDef status_Data = HAL_I2SEx_TransmitReceive_DMA(&hi2s2, (uint16_t *) dacData, (uint16_t *)adcData, BUFFER_SIZE);
+ HAL_StatusTypeDef status_Data = HAL_I2SEx_TransmitReceive_DMA(&hi2s2, (uint16_t *) dacData, (uint16_t *) adcData, BUFFER_SIZE);
 
 
 
@@ -271,7 +269,7 @@ int main(void)
 
 	  //POTS TOP SCREEN FUNCTION
 
-	  DisplayPotBars(adcControlData);
+	  //DisplayPotBars(adcControlData);
 
 	 //DMA STREAMS
 

@@ -1,10 +1,10 @@
 # 🎶 Lo-Fi Sampler DSP
 
-
-
 A compact DIY sampler / DSP with an **STM32 MCU** and **audio codec**, designed for guitar.  
 This project was made to provide guitar players versatility in their effects and provide a 
-way to play record and enjoy their music
+way to play record and enjoy their music.
+
+
 ---
 
 ## 🖼️ Hardware Preview

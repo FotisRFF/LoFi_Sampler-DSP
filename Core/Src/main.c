@@ -26,6 +26,10 @@
 #include "ssd1306_fonts.h"
 #include "ssd1306.h"
 #include "usbd_cdc_if.h"
+#include "IFX_Delay.h"
+#include "Bitcrusher.h"
+#include "IFX_Overdrive.h"
+#include "IFX_Chorus.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,10 +39,12 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define BUFFER_SIZE 512
+#define BUFFER_SIZE 256
 #define INT16_TO_FLOAT (1.0f / 32768.0f)
 #define FLOAT_TO_INT16 (32767.0f)
 #define USB_BUFLEN 128
+#define SAMPLING_FREQUENCY_HZ 48000.0f
+
 
 /* USER CODE END PD */
 
@@ -62,6 +68,9 @@ TIM_HandleTypeDef htim2;
 
 /* USER CODE BEGIN PV */
 TLV_CODEC codec;
+IFX_Overdrive od;
+IFX_Delay dly;
+IFX_Chorus ch;
 
 //USB COM PORT
 uint8_t usbTxBuf[USB_BUFLEN];
@@ -74,8 +83,17 @@ uint16_t adcControlData[3]; //pots
 
 static volatile int16_t *inBufPtr;
 static volatile int16_t *outBufPtr = &dacData[0];
-//ff
+
+int bitDepth = 8;           // for example
+int downsampleFactor = 8;   // for example
+
 uint8_t dataReadyFlag;
+
+uint8_t  fx_overdrive;
+uint8_t  fx_delay;
+uint8_t  fx_clean;
+float outputVolume = 1;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -148,40 +166,160 @@ void HAL_I2SEx_TxRxCpltCallback(I2S_HandleTypeDef *hi2s){
 	dataReadyFlag = 1;
 }
 
-void ProcessData(){
+void ProcessData_Main() {
+    float leftIn, leftOut, rightIn, rightOut;
+    uint16_t raw1 = adcControlData[0];
+
+    	float minVolume = 0;
+    	float maxVolume = 1;
+
+    	outputVolume = minVolume + ((float)raw1 / 4095.0f) *  (maxVolume - minVolume);
+
+
+    for (uint8_t n = 0; n < (BUFFER_SIZE/2) - 1; n += 2) {
+        // ---- LEFT ----
+        leftIn = INT16_TO_FLOAT * inBufPtr[n];
+        if (leftIn > 1.0f)
+        	leftIn -= 2.0f;
+
+        // start chain
+        leftOut = leftIn;
+
+
+        if (fx_overdrive) {
+            leftOut = outputVolume* IFX_Overdrive_Update(&od, leftIn);
+        }
+        if (fx_delay) {
+            leftOut = outputVolume * IFX_Delay_Update(&dly, leftIn);
+        }
+
+        if(fx_clean){
+        	leftOut = outputVolume * IFX_Chorus_Update(&ch, leftIn);
+
+        }
+        outBufPtr[n] = (int16_t)(FLOAT_TO_INT16 * leftOut);
+
+        // ---- RIGHT ----
+        rightIn = INT16_TO_FLOAT * inBufPtr[n+1];
+        if (rightIn > 1.0f)
+        	rightIn -= 2.0f;
+
+
+        rightOut = rightIn;
+
+        outBufPtr[n+1] = (int16_t)(FLOAT_TO_INT16 * rightOut);
+    }
+
+    dataReadyFlag = 0;
+}
+
+/*void ProcessData_bitCrushed(){
 
     static float leftIn ,leftOut;
     static float rightIn ,rightOut;
 
+    // Configure your effect parameters here
+
 
     for(uint8_t n=0; n<(BUFFER_SIZE/2)-1 ;n+=2){
 
+        // ---- LEFT ----
+        leftIn = INT16_TO_FLOAT * inBufPtr[n];
+        if(leftIn > 1.0f) leftIn -= 2.0f;
 
-    	leftIn = INT16_TO_FLOAT *inBufPtr[n];
-    	if(leftIn > 1.0f){
-    		leftIn -=2.0f;
-    	}
+        leftOut = Bitcrusher(leftIn, bitDepth, downsampleFactor,&hold_sample_L, &hold_count_L);
 
-    	leftOut=leftIn;
+        outBufPtr[n] = (int16_t)(FLOAT_TO_INT16 * leftOut);
 
+        // ---- RIGHT ----
+        rightIn = INT16_TO_FLOAT * inBufPtr[n+1];
+        if(rightIn > 1.0f) rightIn -= 2.0f;
 
-    	outBufPtr[n] = (int16_t) (FLOAT_TO_INT16 * leftOut);
+        rightOut = Bitcrusher(rightIn, bitDepth, downsampleFactor,&hold_sample_R, &hold_count_R);
 
-
-    	rightIn = INT16_TO_FLOAT * inBufPtr[n+1];
-    	if(rightIn > 1.0f){
-    	     rightIn -= 2.0f;
-    	}
-    	//edw ginetai to proccseing the ka8e kanali
-    	rightOut=rightIn;
-
-
-    	outBufPtr[n+1] = (int16_t) (FLOAT_TO_INT16 * rightOut);
+        outBufPtr[n+1] = (int16_t)(FLOAT_TO_INT16 * rightOut);
     }
+
     dataReadyFlag = 0;
-
-
 }
+*/
+void UpdateDelayTime(void) {
+    // Read raw ADC (0–4095)
+    uint16_t raw = adcControlData[1];
+
+    // Map it to a delay range, e.g. 10 ms – 1000 ms
+    float minDelayMs = 1.0f;
+    float maxDelayMs = 1000.0f;
+
+    float delayMs = minDelayMs + ((float)raw / 4095.0f) * (maxDelayMs - minDelayMs);
+
+    // Update delay length
+    IFX_Delay_SetLength(&dly, delayMs, SAMPLING_FREQUENCY_HZ);
+}
+void UpdatepreGain(void) {
+    // Read raw ADC (0–4095)
+    uint16_t raw = adcControlData[1];
+
+    // Map it to a delay range, e.g. 10 ms – 1000 ms
+    float minGain = 1.0f;
+    float maxGain = 10.0f;
+
+    float Gain = minGain + ((float)raw / 4095.0f) * (maxGain - minGain);
+
+    // Update delay length
+    IFX_Overdrive_Set_preGain(&od, Gain);
+}
+
+uint8_t mode = 0; // 0 = STOP, 1 = LOOP, 2 = RECORD
+
+void Switch_Modes(void) {
+    // Check button states (active low assumed)
+   if(dataReadyFlag){
+
+	if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_4) == GPIO_PIN_RESET) { // STOP BUTTON
+		fx_overdrive = 1;
+		fx_delay     = 0;
+		fx_clean     = 0;
+		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_SET);    // STOP LED ON
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET); // LOOP LED OFF
+		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);  // RECORD LED OFF
+		ssd1306_SetCursor(32, 32);
+        ssd1306_WriteString("FUZZZ", Font_16x26, White);
+        ssd1306_UpdateScreen();
+        UpdatepreGain();
+    }
+    else if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_4) == GPIO_PIN_RESET) { // LOOP BUTTON
+    	fx_overdrive = 0;
+    	fx_delay     = 0;
+    	fx_clean     = 1;
+        ssd1306_SetCursor(32, 32);
+        ssd1306_WriteString("CLEAN", Font_16x26, White);
+        ssd1306_UpdateScreen();
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);  // STOP LED OFF
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);   // LOOP LED ON
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET);  // RECORD LED OFF
+    }
+    else if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_5) == GPIO_PIN_RESET) { // RECORD BUTTON
+    	fx_overdrive = 0;
+    	fx_delay     = 1;
+    	fx_clean     = 0;
+    	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);  // STOP LED OFF
+    	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET); // LOOP LED OFF
+    	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET);    // RECORD LED ON
+    	ssd1306_SetCursor(32, 32);
+        ssd1306_WriteString("DELAY", Font_16x26	, White);
+        ssd1306_UpdateScreen();
+        UpdateDelayTime();
+
+    }
+	ProcessData_Main();
+  }
+}
+
+
+
+
+
 
 
 
@@ -229,56 +367,36 @@ int main(void)
   Codec_Init(&codec, &hi2c2);
 
   HAL_Delay(50);
-
   ssd1306_Init();
-
 
   //ssd1306_Fill(White);
   //ssd1306_UpdateScreen();
-
-
  HAL_StatusTypeDef status_Data = HAL_I2SEx_TransmitReceive_DMA(&hi2s2, (uint16_t *) dacData, (uint16_t *) adcData, BUFFER_SIZE);
-
-
-
-
-
  HAL_ADC_Start_DMA(&hadc1, (uint32_t *) adcControlData, 3); //pots dma streams xd
  HAL_TIM_Base_Start(&htim2);
+
+ IFX_Overdrive_Init(&od, 1.0f, 0.5f);
+ IFX_Chorus_Init(&ch,10, 15, 20.0f, 20.0f,1.0f, 1.0f,5.0f, 5.0f,0.0f,SAMPLING_FREQUENCY_HZ);
+
+ IFX_Delay_Init(&dly, 250.f, 0.5f, 0.5f,SAMPLING_FREQUENCY_HZ);
+
+
+
+
+
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-//DEBUGING THE I2C REGISTER WRITE ON THE CODEC
- 	uint8_t regdata;
-	HAL_StatusTypeDef read = HAL_I2C_Mem_Read(&hi2c2, (0x18 << 1), 0x07, I2C_MEMADD_SIZE_8BIT, &regdata, 1, 100);
-
-	if(read == HAL_OK){
-		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, 1);
-		/*ssd1306_SetCursor(10, 10);
-		ssd1306_WriteChar(&regdata, Font_11x18, White);
-		ssd1306_UpdateScreen();*/
-	}
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
 
-	  //POTS TOP SCREEN FUNCTION
-
-	  //DisplayPotBars(adcControlData);
-
-	 //DMA STREAMS
-
-
-	  if(dataReadyFlag){
-
-	  ProcessData();
-
-	  }
+	Switch_Modes();
 
 //LED PARTY FOLLOWING
 
@@ -335,9 +453,9 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = 8;
-  RCC_OscInitStruct.PLL.PLLN = 72;
+  RCC_OscInitStruct.PLL.PLLN = 168;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-  RCC_OscInitStruct.PLL.PLLQ = 3;
+  RCC_OscInitStruct.PLL.PLLQ = 7;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -349,10 +467,10 @@ void SystemClock_Config(void)
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
   {
     Error_Handler();
   }
